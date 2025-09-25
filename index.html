@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoWatch AI - Slope Stability Monitoring System</title>
+    
+    <!-- Three.js for 3D Drone -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            overflow-x: hidden;
+            background: #0a0a0a;
+        }
+
+        /* Landing Page Styles */
+        #landingPage {
+            position: fixed;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+
+        #landingPage.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .terrain-bg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 70%);
+            opacity: 0.2;
+        }
+
+        #droneCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .landing-content {
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            transform: translateY(-50%);
+            text-align: left;
+            z-index: 10;
+            color: white;
+            max-width: 500px;
+        }
+
+        .landing-content h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            animation: fadeInUp 1s ease;
+            background: linear-gradient(to right, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .landing-content p {
+            font-size: clamp(1.1rem, 2vw, 1.4rem);
+            margin-bottom: 2rem;
+            opacity: 0.90;
+            animation: fadeInUp 1s ease 0.2s both;
+            line-height: 1.6;
+            color: #e0e0e0;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-start;
+            animation: fadeInUp 1s ease 0.4s both;
+        }
+
+        .btn {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 450px;
+            position: relative;
+            animation: slideUp 0.3s ease;
+        }
+
+        .modal-header {
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+        }
+
+        /* Dashboard Styles */
+        #dashboard {
+            display: none;
+            min-height: 100vh;
+            background: #f5f7fa;
+        }
+
+        #dashboard.active {
+            display: block;
+        }
+
+        .nav-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-item {
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+
+        .nav-item:hover {
+            opacity: 0.8;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 1rem 1.5rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab.active {
+            color: #667eea;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .monitoring-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        #map {
+            height: 500px;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .monitor-btn {
+            background: linear-gradient(135deg, #00d2ff 0%, #3a47d5 100%);
+            color: white;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .monitor-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .monitor-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .logs-container {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+
+        .log-entry {
+            padding: 0.5rem;
+            margin-bottom: 0.3rem;
+            background: white;
+            border-left: 3px solid #667eea;
+            animation: slideInLeft 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-title {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .alert-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .alert-critical {
+            background: #ff4444;
+            color: white;
+        }
+
+        .alert-warning {
+            background: #ffaa00;
+            color: white;
+        }
+
+        .alert-safe {
+            background: #00c851;
+            color: white;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .auth-buttons {
+                flex-direction: column;
+                padding: 0 2rem;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #map {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Landing Page -->
+    <div id="landingPage">
+        <div class="terrain-bg"></div>
+        <canvas id="droneCanvas"></canvas>
+        <div class="landing-content">
+            <h1>GeoWatch AI</h1>
+            <p>Next-Generation Slope Stability Monitoring with AI & UAV Technology</p>
+            <div class="auth-buttons">
+                <button class="btn btn-secondary" onclick="showLogin()">LOGIN TO DASHBOARD</button>
+                <button class="btn btn-primary" onclick="showRegister()">REGISTER AS NEW USER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('loginModal')">×</button>
+            <div class="modal-header">
+                <h2>Welcome Back</h2>
+            </div>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" required placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required placeholder="Enter your password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">LOGIN</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('registerModal')">×</button>
+            <div class="modal-header">
+                <h2>Create Account</h2>
+            </div>
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="registerName" required placeholder="Enter your full name">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="registerEmail" required placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="registerPassword" required placeholder="Create a password">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">REGISTER</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard">
+        <nav class="nav-header">
+            <div class="nav-container">
+                <div class="nav-logo">🚁 GeoWatch AI</div>
+                <div class="nav-menu">
+                    <span class="nav-item">Welcome, <span id="userName">User</span></span>
+                    <button class="nav-item" onclick="logout()" style="background: none; border: none; font-size: 1rem;">Logout</button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="dashboard-container">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Total Monitored Areas</div>
+                    <div class="stat-value">24</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Active Alerts</div>
+                    <div class="stat-value">3<span class="alert-badge alert-critical">Critical</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Last Monitoring</div>
+                    <div class="stat-value">2h ago</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">System Status</div>
+                    <div class="stat-value">Online<span class="alert-badge alert-safe">Active</span></div>
+                </div>
+
+
+                
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('monitoring')">Live Monitoring</button>
+                <button class="tab" onclick="switchTab('history')">Past Monitoring</button>
+                <button class="tab" onclick="switchTab('alerts')">Alerts Sent</button>
+                <button class="tab" onclick="switchTab('auto')">Auto Monitor</button>
+                <button class="tab" onclick="switchTab('analytics')">Analytics</button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div id="monitoring" class="tab-content active">
+                <div class="monitoring-section">
+                    <h2 style="margin-bottom: 1rem;">Dhanbad Jharia Coalfield Region</h2>
+                    <div id="map"></div>
+                    <div class="control-panel">
+                        <button id="startMonitor" class="monitor-btn" onclick="startMonitoring()">
+                            🚁 START MONITORING
+                        </button>
+                        <button class="monitor-btn" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);">
+                            ⚠️ EMERGENCY SCAN
+                        </button>
+                        <button class="monitor-btn" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                            📊 GENERATE REPORT
+                        </button>
+                    </div>
+                    <h3 style="margin-bottom: 1rem;">Live Monitoring Logs</h3>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="log-entry">[System] Ready for monitoring...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="history" class="tab-content">
+                <div class="monitoring-section">
+                    <h2>Past Monitoring Sessions</h2>
+                    <div style="margin-top: 1rem;">
+                        <div class="stat-card" style="margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <strong>Session #023</strong> - 2 hours ago
+                                    <span class="alert-badge alert-warning">2 Warnings</span>
+                                </div>
+                                <button class="btn btn-primary" style="padding: 0.5rem 1rem;">View Details</button>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <strong>Session #022</strong> - 6 hours ago
+                                    <span class="alert-badge alert-safe">All Clear</span>
+                                </div>
+                                <button class="btn btn-primary" style="padding: 0.5rem 1rem;">View Details</button>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <strong>Session #021</strong> - 12 hours ago
+                                    <span class="alert-badge alert-critical">1 Critical</span>
+                                </div>
+                                <button class="btn btn-primary" style="padding: 0.5rem 1rem;">View Details</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="alerts" class="tab-content">
+                <div class="monitoring-section">
+                    <h2>Alert History</h2>
+                    <canvas id="alertChart" style="max-height: 300px; margin-top: 2rem;"></canvas>
+                </div>
+            </div>
+
+            <div id="auto" class="tab-content">
+                <div class="monitoring-section">
+                    <h2>Auto Monitoring Settings</h2>
+                    <div class="form-group" style="max-width: 500px;">
+                        <label>Monitoring Interval</label>
+                        <select style="width: 100%; padding: 0.8rem; border: 2px solid #e0e0e0; border-radius: 10px;">
+                            <option>Every 30 minutes</option>
+                            <option>Every 1 hour</option>
+                            <option>Every 2 hours</option>
+                            <option>Every 6 hours</option>
+                        </select>
+                    </div>
+                    <button class="monitor-btn">ENABLE AUTO MONITOR</button>
+                </div>
+            </div>
+
+            <div id="analytics" class="tab-content">
+                <div class="monitoring-section">
+                    <h2>Stability Analytics</h2>
+                    <canvas id="stabilityChart" style="max-height: 300px; margin-top: 2rem;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio for drone sound -->
+    <audio id="droneSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAAA=" type="audio/wav">
+    </audio>
+
+    <script>
+        // Three.js Drone Animation
+        let scene, camera, renderer, drone;
+        let mixer;
+
+        function init3DDrone() {
+            const canvas = document.getElementById('droneCanvas');
+            scene = new THREE.Scene();
+            scene.background = null; // Dark background
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.5, 6);
+            
+            renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0); 
+            
+            // Enhanced lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const pointLight = new THREE.PointLight(0x4a90e2, 1, 100);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
+            
+            const pointLight2 = new THREE.PointLight(0x7b68ee, 1, 100);
+            pointLight2.position.set(-5, -5, -5);
+            scene.add(pointLight2);
+
+            const loader = new THREE.GLTFLoader();
+            loader.load('assets/scene.gltf', function (gltf) {
+                drone = gltf.scene;
+                drone.scale.set(3, 3, 3); // Bigger drone
+                drone.position.x = 1.5; // Shift to the right
+                scene.add(drone);
+
+                // Don't play animations - just hover
+                // mixer = new THREE.AnimationMixer(drone);
+                // gltf.animations.forEach((clip) => {
+                //     mixer.clipAction(clip).play();
+                // });
+
+                animate();
+            }, undefined, function (error) {
+                console.error('Error loading drone model:', error);
+            });
+        }
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            // Don't update mixer (animations) - no animation playback
+
+            if (drone) {
+                // Smooth side-to-side rotation (45 degrees left and right)
+                const time = Date.now() * 0.001;
+                drone.rotation.y = Math.sin(time * 0.8) * 0.4; // Gentle side-to-side rotation
+                
+                // Add subtle floating effect
+                drone.position.y = Math.sin(time * 0.5) * 0.1; // Gentle up/down movement
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('load', init3DDrone);
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+
+        // Authentication Functions (Mock - Replace with Firebase)
+        function showLogin() {
+            document.getElementById('loginModal').classList.add('active');
+        }
+
+        function showRegister() {
+            document.getElementById('registerModal').classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            // Mock authentication - replace with Firebase
+            console.log('Login attempt:', email);
+            
+            // Simulate successful login
+            localStorage.setItem('user', JSON.stringify({ email, name: email.split('@')[0] }));
+            closeModal('loginModal');
+            showDashboard();
+        }
+
+        function handleRegister(event) {
+            event.preventDefault();
+            const name = document.getElementById('registerName').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            
+            // Mock registration - replace with Firebase
+            console.log('Register attempt:', { name, email });
+            
+            // Simulate successful registration
+            localStorage.setItem('user', JSON.stringify({ email, name }));
+            closeModal('registerModal');
+            showDashboard();
+        }
+
+        function showDashboard() {
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (user) {
+                document.getElementById('userName').textContent = user.name;
+                document.getElementById('landingPage').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('landingPage').style.display = 'none';
+                    document.getElementById('dashboard').classList.add('active');
+                    initMap();
+                    initCharts();
+                }, 500);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            location.reload();
+        }
+
+        // Map Initialization
+        let map, monitoringInterval;
+        
+        function initMap() {
+            // Dhanbad Jharia coalfield coordinates
+            map = L.map('map').setView([23.7957, 86.4304], 15);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Add some initial markers
+            const zones = [
+                { lat: 23.7957, lng: 86.4304, status: 'safe', name: 'Zone A' },
+                { lat: 23.7967, lng: 86.4314, status: 'warning', name: 'Zone B' },
+                { lat: 23.7947, lng: 86.4294, status: 'critical', name: 'Zone C' }
+            ];
+            
+            zones.forEach(zone => {
+                const color = zone.status === 'critical' ? 'red' : zone.status === 'warning' ? 'orange' : 'green';
+                L.circleMarker([zone.lat, zone.lng], {
+                    radius: 10,
+                    fillColor: color,
+                    color: '#000',
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map).bindPopup(`<b>${zone.name}</b><br>Status: ${zone.status}`);
+            });
+        }
+
+        // Monitoring Functions
+        let isMonitoring = false;
+        
+        function startMonitoring() {
+            if (isMonitoring) return;
+            
+            isMonitoring = true;
+            const btn = document.getElementById('startMonitor');
+            btn.disabled = true;
+            btn.textContent = '🚁 MONITORING IN PROGRESS...';
+            
+            const logs = document.getElementById('logsContainer');
+            logs.innerHTML = '';
+            
+            // Play drone sound (mock)
+            try {
+                const audio = document.getElementById('droneSound');
+                audio.play().catch(e => console.log('Audio play failed:', e));
+            } catch(e) {}
+            
+            // Simulation sequence
+            const sequence = [
+                { time: 0, log: '[System] Initializing drone systems...' },
+                { time: 1000, log: '[Drone] Pre-flight checks completed ✓' },
+                { time: 2000, log: '[Drone] Taking off from base station...' },
+                { time: 3000, log: '[GPS] Navigating to Zone A (23.7957°N, 86.4304°E)' },
+                { time: 4500, log: '[LiDAR] Scanning terrain surface...' },
+                { time: 6000, log: '[AI] Analyzing slope stability patterns...' },
+                { time: 7500, log: '[Alert] Minor crack detected in Zone B - FOS: 45%', type: 'warning' },
+                { time: 9000, log: '[GPS] Moving to Zone C for inspection...' },
+                { time: 10500, log: '[Alert] CRITICAL: Potential landslide risk in Zone C - FOS: 22%', type: 'critical' },
+                { time: 12000, log: '[System] Sending alerts to registered emails and Telegram...' },
+                { time: 13000, log: '[Notification] Emergency alerts dispatched successfully ✓' },
+                { time: 14000, log: '[Drone] Returning to base station...' },
+                { time: 15000, log: '[System] Monitoring session completed successfully' }
+            ];
+            
+            sequence.forEach(item => {
+                setTimeout(() => {
+                    addLog(item.log, item.type);
+                    
+                    // Add visual alerts on map
+                    if (item.type === 'critical') {
+                        L.circleMarker([23.7947, 86.4294], {
+                            radius: 15,
+                            fillColor: 'red',
+                            color: 'darkred',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.5
+                        }).addTo(map)
+                        .bindPopup('<b>CRITICAL ALERT</b><br>Immediate attention required!')
+                        .openPopup();
+                    }
+                }, item.time);
+            });
+            
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '🚁 START MONITORING';
+                isMonitoring = false;
+                
+                // Show notification
+                showNotification('Monitoring Complete', 'Critical areas detected. Emergency teams notified.');
+            }, 16000);
+        }
+
+        function addLog(message, type = 'info') {
+            const logs = document.getElementById('logsContainer');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            if (type === 'warning') {
+                entry.style.borderLeftColor = '#ffaa00';
+                entry.style.background = '#fff8e1';
+            } else if (type === 'critical') {
+                entry.style.borderLeftColor = '#ff4444';
+                entry.style.background = '#ffebee';
+                entry.style.fontWeight = 'bold';
+            }
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function showNotification(title, message) {
+            // Browser notification (requires permission)
+            if ("Notification" in window) {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        new Notification(title, {
+                            body: message,
+                            icon: '🚁'
+                        });
+                    }
+                });
+            }
+        }
+
+        // Tab Switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        // Initialize Charts
+        function initCharts() {
+            // Alert History Chart
+            const alertCtx = document.getElementById('alertChart');
+            if (alertCtx) {
+                new Chart(alertCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        datasets: [{
+                            label: 'Critical Alerts',
+                            data: [2, 1, 3, 2, 4, 1, 2],
+                            borderColor: '#ff4444',
+                            backgroundColor: 'rgba(255, 68, 68, 0.1)',
+                            tension: 0.4
+                        }, {
+                            label: 'Warnings',
+                            data: [5, 4, 6, 3, 7, 4, 5],
+                            borderColor: '#ffaa00',
+                            backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+            
+            // Stability Chart
+            const stabilityCtx = document.getElementById('stabilityChart');
+            if (stabilityCtx) {
+                new Chart(stabilityCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Zone A', 'Zone B', 'Zone C', 'Zone D', 'Zone E'],
+                        datasets: [{
+                            label: 'Factor of Safety (%)',
+                            data: [85, 45, 22, 67, 92],
+                            backgroundColor: [
+                                'rgba(0, 200, 81, 0.6)',
+                                'rgba(255, 170, 0, 0.6)',
+                                'rgba(255, 68, 68, 0.6)',
+                                'rgba(255, 170, 0, 0.6)',
+                                'rgba(0, 200, 81, 0.6)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+        }
+
+        // Check for existing session
+        window.addEventListener('load', () => {
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (user) {
+                showDashboard();
+            }
+        });
+    </script>
+</body>
+</html>
