@@ -54,12 +54,48 @@
             opacity: 0.2;
         }
 
+        .terrain-image-container {
+            position: absolute;
+            top: 50%;
+            right: 50px;
+            transform: translateY(-50%);
+            width: 480px;
+            height: 480px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .terrain-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .terrain-image-container:hover .terrain-image {
+            transform: scale(1.05);
+        }
+
+        /* Color grading effect for terrain image */
+        .terrain-image {
+            filter: hue-rotate(15deg) saturate(1.2) contrast(1.1) brightness(1.05);
+        }
+
         #droneCanvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            z-index: 6;
         }
 
         .landing-content {
@@ -485,6 +521,10 @@
                 <button class="btn btn-primary" onclick="showRegister()">REGISTER AS NEW USER</button>
             </div>
         </div>
+        <!-- Terrain Image Container -->
+        <div class="terrain-image-container">
+            <img src="terrain.png" alt="Terrain Visualization" class="terrain-image">
+        </div>
     </div>
 
     <!-- Login Modal -->
@@ -669,53 +709,57 @@
     </div>
 
     <!-- Audio for drone sound -->
-    <audio id="droneSound" preload="auto">
-        <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAAA=" type="audio/wav">
-    </audio>
+    <audio id="droneSound" src="dronesound.m4a" preload="auto"></audio>
 
     <script>
         // Three.js Drone Animation
         let scene, camera, renderer, drone;
         let mixer;
+        let droneEntered = false;
+        let animationStarted = false;
+        let animationStartTime;
+        const animationDuration = 6000; // 6 seconds
 
         function init3DDrone() {
+            animationStarted = true;
             const canvas = document.getElementById('droneCanvas');
             scene = new THREE.Scene();
             scene.background = null; // Dark background
             
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.5, 6);
+            camera.position.set(0, 1.5, 15);
             
             renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000000, 0); 
             
             // Enhanced lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
             scene.add(ambientLight);
             
-            const pointLight = new THREE.PointLight(0x4a90e2, 1, 100);
+            const pointLight = new THREE.PointLight(0x4a90e2, 1.5, 100);
             pointLight.position.set(5, 5, 5);
             scene.add(pointLight);
             
-            const pointLight2 = new THREE.PointLight(0x7b68ee, 1, 100);
+            const pointLight2 = new THREE.PointLight(0x7b68ee, 1.5, 100);
             pointLight2.position.set(-5, -5, -5);
             scene.add(pointLight2);
 
             const loader = new THREE.GLTFLoader();
             loader.load('assets/scene.gltf', function (gltf) {
                 drone = gltf.scene;
-                drone.scale.set(3, 3, 3); // Bigger drone
-                drone.position.x = 1.5; // Shift to the right
+                drone.scale.set(2, 2, 2); // Bigger drone
+                // Start drone off-screen for the entrance animation
+                drone.position.set(-10, 2, 10); // Start from left, above the normal position
+                drone.rotation.x = 0.5;
+                drone.rotation.z = 0.1;
                 scene.add(drone);
 
-                // Don't play animations - just hover
-                // mixer = new THREE.AnimationMixer(drone);
-                // gltf.animations.forEach((clip) => {
-                //     mixer.clipAction(clip).play();
-                // });
-
+                animationStartTime = Date.now();
                 animate();
+                
+                const audio = document.getElementById('droneSound');
+                audio.play().catch(e => console.log('Audio play failed:', e));
             }, undefined, function (error) {
                 console.error('Error loading drone model:', error);
             });
@@ -726,22 +770,42 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const delta = clock.getDelta();
-            // Don't update mixer (animations) - no animation playback
-
             if (drone) {
-                // Smooth side-to-side rotation (45 degrees left and right)
-                const time = Date.now() * 0.001;
-                drone.rotation.y = Math.sin(time * 0.8) * 0.4; // Gentle side-to-side rotation
-                
-                // Add subtle floating effect
-                drone.position.y = Math.sin(time * 0.5) * 0.1; // Gentle up/down movement
+                if (!droneEntered) {
+                    const elapsedTime = Date.now() - animationStartTime;
+                    const progress = Math.min(elapsedTime / animationDuration, 1);
+                    const easedProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+
+                    const startX = -10;
+                    const endX = 4;
+                    drone.position.x = startX + (endX - startX) * easedProgress;
+
+                    const startY = 2;
+                    const endY = 3;
+                    drone.position.y = startY + (endY - startY) * easedProgress;
+
+                    if (progress >= 1) {
+                        droneEntered = true;
+                    }
+                } else {
+                    // Smooth side-to-side rotation (45 degrees left and right)
+                    const time = Date.now() * 0.001;
+                    drone.rotation.y = Math.sin(time * 0.8) * 0.4; // Gentle side-to-side rotation
+                    
+                    // Add subtle floating effect
+                    drone.position.y = 3 + Math.sin(time * 0.5) * 0.1; // Gentle up/down movement around new position
+                }
             }
 
-            renderer.render(scene, camera);
+            if(renderer) renderer.render(scene, camera);
         }
 
-        window.addEventListener('load', init3DDrone);
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !animationStarted) {
+                init3DDrone();
+            }
+        });
+
         window.addEventListener('resize', () => {
             if (camera && renderer) {
                 camera.aspect = window.innerWidth / window.innerHeight;
